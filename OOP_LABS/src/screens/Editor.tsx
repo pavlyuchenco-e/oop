@@ -1,24 +1,13 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Save, Circle, MousePointer, Palette, Pen } from 'lucide-react';
+import { ArrowLeft, Save, Circle, MousePointer, Palette, Pen, Square } from 'lucide-react';
 import { useRef, useEffect, useState } from 'react';
 import { RasterRenderer, type RGBA, type LineAlg, hexToRGBA } from '../lib/raster/RasterRenderer';
-
-// Тип для хранимых фигур
-interface Shape {
-  type: 'circle' | 'line';
-  // для круга
-  x?: number;
-  y?: number;
-  radius?: number;
-  // для линии
-  x1?: number;
-  y1?: number;
-  x2?: number;
-  y2?: number;
-  thickness?: number;
-  color: RGBA;
-}
+import { Shape } from '../lib/geometry/Shape';
+import { Rect } from '../lib/geometry/Rect';
+import { Line } from '../lib/geometry/Line';
+import { Oval } from '../lib/geometry/Oval';
+import { Transform } from '../lib/geometry/Transform';
 
 export default function Editor() {
   const { id } = useParams();
@@ -28,33 +17,29 @@ export default function Editor() {
   const [color, setColor] = useState('#3b82f6');
   const [lineThickness, setLineThickness] = useState(1);
 
-  // Состояние для хранения всех нарисованных фигур
   const [shapes, setShapes] = useState<Shape[]>([]);
   const shapesRef = useRef<Shape[]>([]);
 
-  // Для рисования линии по двум кликам
   const [lineStart, setLineStart] = useState<{ x: number; y: number } | null>(null);
-  // Текущая позиция мыши для предпросмотра линии
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<RasterRenderer | null>(null);
 
-  // Навигация
   const goBack = () => navigate(-1);
   const saveAndGoHome = () => navigate('/', { replace: true });
 
-  // Панель инструментов
   const tools = [
     { id: 'select', icon: MousePointer, label: 'Выбор' },
+    { id: 'rect', icon: Square, label: 'Прямоугольник' },
     { id: 'circle', icon: Circle, label: 'Круг' },
     { id: 'line', icon: Pen, label: 'Линия' },
   ];
 
   useEffect(() => {
-      shapesRef.current = shapes;
+    shapesRef.current = shapes;
   }, [shapes]);
-  // Инициализация рендерера и цикла кадров
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -80,18 +65,15 @@ export default function Editor() {
       resizeObserver.disconnect();
       renderer.dispose();
     };
-  }, []); // только при монтировании
+  }, []);
 
-  // Обновление алгоритма в рендерере при его изменении
   useEffect(() => {
     if (rendererRef.current) {
       rendererRef.current.setLineAlgorithm(lineAlg);
     }
   }, [lineAlg]);
 
-  // Функция отрисовки всей сцены: начальные примитивы + все фигуры из состояния
   function drawScene(r: RasterRenderer) {
-    // 1. Закрашенный красный треугольник (многоугольник)
     const red: RGBA = { r: 255, g: 0, b: 0, a: 255 };
     r.fillPolygon([
       { x: 100, y: 100 },
@@ -99,11 +81,9 @@ export default function Editor() {
       { x: 200, y: 300 },
     ], red);
 
-    // 2. Полупрозрачный синий круг (проверка блендинга с треугольником → фиолетовый оттенок)
     const translucentBlue: RGBA = { r: 0, g: 100, b: 255, a: 200 };
     r.fillCircle(230, 150, 60, translucentBlue);
 
-    // 3. Толстая ломаная (квадрат) – проверка strokePolygon без дырок (толщина 6)
     const black: RGBA = { r: 0, g: 0, b: 0, a: 255 };
     r.strokePolygon([
       { x: 500, y: 100 },
@@ -112,90 +92,100 @@ export default function Editor() {
       { x: 500, y: 300 },
     ], black, 6);
 
-    // 4. Диагональная линия для демонстрации переключения алгоритмов (толщина 1)
     const yellow: RGBA = { r: 255, g: 255, b: 0, a: 255 };
     r.drawLine(50, 400, 750, 550, yellow);
 
     for (const shape of shapesRef.current) {
-      if (shape.type === 'circle') {
-        r.fillCircle(shape.x!, shape.y!, shape.radius!, shape.color);
-      } else if (shape.type === 'line') {
-        if (shape.thickness! <= 1) {
-          r.drawLine(shape.x1!, shape.y1!, shape.x2!, shape.y2!, shape.color);
-        } else {
-          r.strokeLine(shape.x1!, shape.y1!, shape.x2!, shape.y2!, shape.color, shape.thickness!);
-        }
-      }
-    }
-
-    // ------------------- Предпросмотр резиновой линии (если рисуем линию) -------------------
-    if (selectedTool === 'line' && lineStart && mousePos) {
-      const previewColor = hexToRGBA(color, 150); // полупрозрачный цвет для предпросмотра
-      if (lineThickness <= 1) {
-        r.drawLine(lineStart.x, lineStart.y, mousePos.x, mousePos.y, previewColor);
-      } else {
-        r.strokeLine(lineStart.x, lineStart.y, mousePos.x, mousePos.y, previewColor, lineThickness);
-      }
+      shape.drawRaster(r);
     }
   }
 
-  // Обработчик клика на canvas
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  // Вспомогательная функция: преобразовать CSS-координаты мыши в физические пиксели canvas
+  function getDeviceCoords(e: React.MouseEvent<HTMLCanvasElement>): { x: number; y: number } | null {
     const renderer = rendererRef.current;
-    if (!renderer) return;
-
+    if (!renderer) return null;
     const rect = e.currentTarget.getBoundingClientRect();
     const dpr = renderer.dpr;
-    const x = (e.clientX - rect.left) * dpr;
-    const y = (e.clientY - rect.top) * dpr;
+    return {
+      x: (e.clientX - rect.left) * dpr,
+      y: (e.clientY - rect.top) * dpr,
+    };
+  }
 
-    if (selectedTool === 'circle') {
-      const newCircle: Shape = {
-        type: 'circle',
-        x,
-        y,
-        radius: 30 * dpr,
-        color: hexToRGBA(color, 200),
-      };
-      setShapes([...shapes, newCircle]);
-    } 
+  // Обработчик клика: создание новой фигуры в зависимости от выбранного инструмента
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const coords = getDeviceCoords(e);
+    if (!coords) return;
+    const { x, y } = coords;
+
+    // Базовые стили (цвета и прозрачность)
+    const fillColor = hexToRGBA(color, 200);
+    const strokeColor = hexToRGBA(color, 255);
+    const fillOpacity = 0.8;
+
+    // 1. Прямоугольник
+    if (selectedTool === 'rect') {
+      const rect = new Rect(
+        `rect_${Date.now()}_${Math.random()}`,
+        100, 60,                           // ширина, высота
+        new Transform({ x, y, rotation: 0, scaleX: 1, scaleY: 1 }),
+        {
+          fillStyle: fillColor,
+          fillOpacity,
+          strokeStyle: strokeColor,
+          strokeWidth: lineThickness,
+          strokeOpacity: 1,
+        }
+      );
+      setShapes([...shapes, rect]);
+    }
+    // 2. Круг (используем Oval с rx == ry)
+    else if (selectedTool === 'circle') {
+      const radius = 30 * (rendererRef.current?.dpr || 1);
+      const oval = new Oval(
+        `circle_${Date.now()}_${Math.random()}`,
+        radius, radius,
+        new Transform({ x, y, rotation: 0, scaleX: 1, scaleY: 1 }),
+        {
+          fillStyle: fillColor,
+          fillOpacity,
+          strokeStyle: strokeColor,
+          strokeWidth: lineThickness,
+          strokeOpacity: 1,
+        }
+      );
+      setShapes([...shapes, oval]);
+    }
+
     else if (selectedTool === 'line') {
       if (lineStart === null) {
-        // первый клик – запоминаем начало
         setLineStart({ x, y });
       } else {
-        // второй клик – добавляем финальную линию
-        const newLine: Shape = {
-          type: 'line',
-          x1: lineStart.x,
-          y1: lineStart.y,
-          x2: x,
-          y2: y,
-          thickness: lineThickness,
-          color: hexToRGBA(color, 255),
-        };
-        setShapes([...shapes, newLine]);
+        const line = Line.fromScreenPoints(
+          `line_${Date.now()}_${Math.random()}`,
+          lineStart,
+          { x, y },
+          {
+            strokeStyle: strokeColor,
+            strokeWidth: lineThickness,
+            strokeOpacity: 1,
+          }
+        );
+        setShapes([...shapes, line]);
         setLineStart(null);
         setMousePos(null);
       }
     }
   };
 
-  // Движение мыши для предпросмотра линии
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (selectedTool !== 'line' || lineStart === null) return;
-    const renderer = rendererRef.current;
-    if (!renderer) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const dpr = renderer.dpr;
-    const x = (e.clientX - rect.left) * dpr;
-    const y = (e.clientY - rect.top) * dpr;
-    setMousePos({ x, y });
+    const coords = getDeviceCoords(e);
+    if (coords) setMousePos(coords);
   };
 
   const handleMouseLeave = () => {
     if (lineStart !== null) {
-      // Если вышли за пределы canvas, сбрасываем рисование линии
       setLineStart(null);
       setMousePos(null);
     }
@@ -250,6 +240,7 @@ export default function Editor() {
                 whileTap={{ scale: 0.95 }}
                 onClick={() => {
                   setSelectedTool(tool.id);
+                  // При смене инструмента сбрасываем рисование линии
                   setLineStart(null);
                   setMousePos(null);
                 }}
@@ -298,7 +289,7 @@ export default function Editor() {
           </h3>
           <div className="space-y-4">
             <div>
-              <label className="text-sm text-slate-400 block mb-2">Цвет линий/заливки</label>
+              <label className="text-sm text-slate-400 block mb-2">Цвет заливки/обводки</label>
               <input
                 type="color"
                 value={color}
@@ -308,7 +299,7 @@ export default function Editor() {
             </div>
             <div>
               <label className="text-sm text-slate-400 block mb-2">
-                Толщина линии (для инструмента «Линия»)
+                Толщина обводки (для Rect, Line, Oval)
               </label>
               <input
                 type="range"
@@ -321,7 +312,9 @@ export default function Editor() {
               <span className="text-xs text-slate-400">{lineThickness} px</span>
             </div>
             <div>
-              <label className="text-sm text-slate-400 block mb-2">Алгоритм рисования линий (толщина 1)</label>
+              <label className="text-sm text-slate-400 block mb-2">
+                Алгоритм линий (толщина 1)
+              </label>
               <select
                 value={lineAlg}
                 onChange={(e) => setLineAlg(e.target.value as LineAlg)}
