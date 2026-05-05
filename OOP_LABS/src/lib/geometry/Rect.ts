@@ -41,7 +41,7 @@ export class Rect extends Shape {
         if (!local) return false;
         const w2 = this.width / 2;
         const h2 = this.height / 2;
-        return Math.abs(local.x) <= w2 && Math.abs(local.y) <= h2;
+        return Math.abs(local.x) < w2 && Math.abs(local.y) < h2;
     }
 
     getBounds(): Bounds {

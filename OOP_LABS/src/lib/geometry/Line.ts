@@ -9,7 +9,7 @@ export class Line extends Shape {
     x2: number;
     y2: number;
 
-    constructor (id: string, x1: number, x2: number, y1: number, y2: number, transform?: Transform, style?: any){
+    constructor (id: string, x1: number, y1: number, x2: number, y2: number, transform?: Transform, style?: any){
         super(id, transform, style)
 
         this.x1 = x1;
@@ -65,7 +65,7 @@ export class Line extends Shape {
         const p1 = this.transformPointToDevice(this.x1, this.y1);
         const p2 = this.transformPointToDevice(this.x2, this.y2);
         const minX = Math.min(p1.x, p2.x);
-        const minY = Math.min(p2.x, p2.y);
+        const minY = Math.min(p1.y, p2.y);
         const maxX = Math.max(p1.x, p2.x);
         const maxY = Math.max(p1.y, p2.y);
         
