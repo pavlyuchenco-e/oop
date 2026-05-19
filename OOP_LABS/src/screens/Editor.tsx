@@ -1,12 +1,17 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Save, Circle, MousePointer, Palette, Pen, Square } from 'lucide-react';
+import { Triangle as TriangleIcon } from 'lucide-react';
+import { Square, Circle, Pen, Move, GitBranch, Palette, ArrowLeft, Save} from 'lucide-react'; // нужны иконки
 import { useRef, useEffect, useState } from 'react';
 import { RasterRenderer, type RGBA, type LineAlg, hexToRGBA } from '../lib/raster/RasterRenderer';
 import { Shape } from '../lib/geometry/Shape';
 import { Rect } from '../lib/geometry/Rect';
 import { Line } from '../lib/geometry/Line';
 import { Oval } from '../lib/geometry/Oval';
+import { Triangle } from '../lib/geometry/Triangle';
+import { QuadraticBezier } from '../lib/geometry/QuadraticBezier';
+import { CubicBezier } from '../lib/geometry/CubicBezier';
+import { PathBezier } from '../lib/geometry/PathBezier';
 import { Transform } from '../lib/geometry/Transform';
 
 export default function Editor() {
@@ -30,10 +35,14 @@ export default function Editor() {
   const saveAndGoHome = () => navigate('/', { replace: true });
 
   const tools = [
-    { id: 'select', icon: MousePointer, label: 'Выбор' },
+    { id: 'select', icon: Move, label: 'Выбор' },
     { id: 'rect', icon: Square, label: 'Прямоугольник' },
     { id: 'circle', icon: Circle, label: 'Круг' },
     { id: 'line', icon: Pen, label: 'Линия' },
+    { id: 'triangle', icon: TriangleIcon, label: 'Треугольник' },
+    { id: 'quadratic', icon: GitBranch, label: 'Квадр. Безье' },
+    { id: 'cubic', icon: GitBranch, label: 'Куб. Безье' },
+    { id: 'path', icon: GitBranch, label: 'Путь' },
   ];
 
   useEffect(() => {
@@ -175,6 +184,61 @@ export default function Editor() {
         setLineStart(null);
         setMousePos(null);
       }
+    }
+    else if (selectedTool === 'triangle') {
+        const size = 60 * (rendererRef.current?.dpr || 1);
+        const v1 = { x: x - size/2, y: y + size/3 };
+        const v2 = { x: x + size/2, y: y + size/3 };
+        const v3 = { x: x, y: y - size/2 };
+        const triangle = new Triangle(`tri_${Date.now()}`, v1, v2, v3, undefined, {
+            fillStyle: fillColor,
+            fillOpacity,
+            strokeStyle: strokeColor,
+            strokeWidth: lineThickness,
+            strokeOpacity: 1,
+        });
+        setShapes([...shapes, triangle]);
+    }
+    else if (selectedTool === 'quadratic') {
+        const offset = 50 * (rendererRef.current?.dpr || 1);
+        const p0 = { x: x - offset, y: y };
+        const p1 = { x: x, y: y - offset };
+        const p2 = { x: x + offset, y: y };
+        const bez = new QuadraticBezier(`quad_${Date.now()}`, p0, p1, p2, undefined, {
+            strokeStyle: strokeColor,
+            strokeWidth: lineThickness,
+            strokeOpacity: 1,
+        });
+        setShapes([...shapes, bez]);
+    }
+    else if (selectedTool === 'cubic') {
+        const offset = 60 * (rendererRef.current?.dpr || 1);
+        const p0 = { x: x - offset, y: y };
+        const p1 = { x: x - offset/2, y: y - offset };
+        const p2 = { x: x + offset/2, y: y + offset };
+        const p3 = { x: x + offset, y: y };
+        const bez = new CubicBezier(`cubic_${Date.now()}`, p0, p1, p2, p3, undefined, {
+            strokeStyle: strokeColor,
+            strokeWidth: lineThickness,
+            strokeOpacity: 1,
+        });
+        setShapes([...shapes, bez]);
+    }
+    else if (selectedTool === 'path') {
+        // Создаём простой путь из 4–5 точек в виде ломаной
+        const pts = [
+            { x: x - 80, y: y - 50 },
+            { x: x - 40, y: y - 80 },
+            { x: x, y: y - 20 },
+            { x: x + 40, y: y - 70 },
+            { x: x + 80, y: y },
+        ];
+        const path = new PathBezier(`path_${Date.now()}`, pts, 'polyline', false, undefined, {
+            strokeStyle: strokeColor,
+            strokeWidth: lineThickness,
+            strokeOpacity: 1,
+        });
+        setShapes([...shapes, path]);
     }
   };
 
