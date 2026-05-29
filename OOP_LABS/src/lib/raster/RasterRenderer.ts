@@ -247,6 +247,19 @@ export class RasterRenderer {
         }
     }
 
+    strokeCircle(cx: number, cy: number, radius: number, color: RGBA, strokeWidth: number = 1): void {
+        const r = Math.abs(radius);
+        const steps = 36;
+        const points: { x: number; y: number }[] = [];
+        for (let i = 0; i <= steps; i++) {
+            const angle = (i / steps) * Math.PI * 2;
+            const x = cx + r * Math.cos(angle);
+            const y = cy + r * Math.sin(angle);
+            points.push({ x, y });
+        }
+        this.strokePolygon(points, color, strokeWidth);
+    }
+
     // TODO: Отрисовка толстого отрезка (прямоугольник + шапки).
     strokeLine(x0: number, y0: number, x1: number, y1: number, color: RGBA, width = 1) {
         const w = Math.max(0, width);

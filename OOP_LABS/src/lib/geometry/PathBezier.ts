@@ -120,7 +120,7 @@ export class PathBezier extends Shape {
             const distSq = dx*dx + dy*dy;
             if (distSq < minDistSq) minDistSq = distSq;
         }
-        const threshold = this.strokeWidth / 2;
+        const threshold = Math.max(5, this.strokeWidth / 2);
         return Math.sqrt(minDistSq) <= threshold;
     }
 
@@ -198,23 +198,38 @@ export class PathBezier extends Shape {
     }
 
     resizeFromDeviceAABB(minX: number, minY: number, maxX: number, maxY: number): void {
-        // Масштабируем все точки относительно нового AABB
         const oldBounds = this.getBounds();
-        const scaleX = (maxX - minX) / (oldBounds.maxX - oldBounds.minX);
-        const scaleY = (maxY - minY) / (oldBounds.maxY - oldBounds.minY);
-        const newCenter = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
-        for (let pt of this.points) {
+        const oldW = oldBounds.maxX - oldBounds.minX;
+        const oldH = oldBounds.maxY - oldBounds.minY;
+        if (oldW === 0 || oldH === 0) return;
+        const scaleX = (maxX - minX) / oldW;
+        const scaleY = (maxY - minY) / oldH;
+        const newCenterX = (minX + maxX) / 2;
+        const newCenterY = (minY + maxY) / 2;
+        const oldCenterX = (oldBounds.minX + oldBounds.maxX) / 2;
+        const oldCenterY = (oldBounds.minY + oldBounds.maxY) / 2;
+
+        // Шаг 1: вычисляем новые мировые позиции ДО изменения transform
+        const newWorldPositions = this.points.map(pt => {
             const world = this.transformPointToDevice(pt.x, pt.y);
-            const newWorldX = newCenter.x + (world.x - newCenter.x) * scaleX;
-            const newWorldY = newCenter.y + (world.y - newCenter.y) * scaleY;
-            const newLocal = this.transformPointToLocal(newWorldX, newWorldY);
+            return {
+                x: newCenterX + (world.x - oldCenterX) * scaleX,
+                y: newCenterY + (world.y - oldCenterY) * scaleY,
+            };
+        });
+
+        // Шаг 2: обновляем transform — теперь матрица актуальна
+        this.transform.x = newCenterX;
+        this.transform.y = newCenterY;
+
+        // Шаг 3: переводим мировые точки в локальные через НОВУЮ инвертированную матрицу
+        for (let i = 0; i < this.points.length; i++) {
+            const newLocal = this.transformPointToLocal(newWorldPositions[i].x, newWorldPositions[i].y);
             if (newLocal) {
-                pt.x = newLocal.x;
-                pt.y = newLocal.y;
+                this.points[i].x = newLocal.x;
+                this.points[i].y = newLocal.y;
             }
         }
-        this.transform.x = newCenter.x;
-        this.transform.y = newCenter.y;
         this.updateCache();
     }
 }

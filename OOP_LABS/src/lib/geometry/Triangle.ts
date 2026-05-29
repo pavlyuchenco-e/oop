@@ -117,18 +117,27 @@ export class Triangle extends Shape{
         const scaleY = newHeight / oldHeight;
         const newCenterX = (minX + maxX) / 2;
         const newCenterY = (minY + maxY) / 2;
-        for (const v of [this._v1, this._v2, this._v3]) {
+
+        // Шаг 1: вычисляем новые мировые позиции вершин ДО изменения transform
+        const newWorldPositions = [this._v1, this._v2, this._v3].map(v => {
             const world = this.transformPointToDevice(v.x, v.y);
-            const newWorldX = newCenterX + (world.x - oldBounds.minX - oldWidth/2) * scaleX;
-            const newWorldY = newCenterY + (world.y - oldBounds.minY - oldHeight/2) * scaleY;
-            // Преобразуем обратно в локальные
-            const newLocal = this.transformPointToLocal(newWorldX, newWorldY);
-            if (newLocal) {
-                v.x = newLocal.x;
-                v.y = newLocal.y;
-            }
-        }
+            return {
+                x: newCenterX + (world.x - oldBounds.minX - oldWidth / 2) * scaleX,
+                y: newCenterY + (world.y - oldBounds.minY - oldHeight / 2) * scaleY,
+            };
+        });
+
+        // Шаг 2: обновляем transform.x/y — теперь матрица актуальна
         this.transform.x = newCenterX;
         this.transform.y = newCenterY;
+
+        // Шаг 3: инвертируем НОВУЮ матрицу и переводим мировые точки в локальные
+        for (let i = 0; i < 3; i++) {
+            const newLocal = this.transformPointToLocal(newWorldPositions[i].x, newWorldPositions[i].y);
+            if (newLocal) {
+                [this._v1, this._v2, this._v3][i].x = newLocal.x;
+                [this._v1, this._v2, this._v3][i].y = newLocal.y;
+            }
+        }
     }
 }

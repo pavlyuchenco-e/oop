@@ -1,7 +1,7 @@
 import { Shape, type Bounds } from "./Shape";
 import { type RasterRenderer } from "../raster/RasterRenderer";
 import { Transform } from "./Transform";
-import { mat3 } from "../math/mat3";
+
 
 export class Line extends Shape {
     x1: number;
@@ -57,7 +57,9 @@ export class Line extends Shape {
 
         const invScaleX = 1 / Math.abs(this.transform.scaleX);
         const invScaleY = 1 / Math.abs(this.transform.scaleY);
-        const threshold = (this.strokeWidth / 2) * Math.min(invScaleX, invScaleY);
+        // Use at least 5px hit area so thin lines (strokeWidth=1) are still selectable
+        const minThreshold = 5 * Math.min(invScaleX, invScaleY);
+        const threshold = Math.max(minThreshold, (this.strokeWidth / 2) * Math.min(invScaleX, invScaleY));
         return Math.sqrt(sqDist) <= threshold;
     }
 
@@ -112,6 +114,7 @@ export class Line extends Shape {
     }
 
     resizeFromDeviceAABB(minX: number, minY: number, maxX: number, maxY: number): void {
+        // Получаем текущие мировые позиции концов линии
         const p1dev = this.transformPointToDevice(this.x1, this.y1);
         const p2dev = this.transformPointToDevice(this.x2, this.y2);
 
@@ -122,41 +125,35 @@ export class Line extends Shape {
         const oldW = oldMaxX - oldMinX;
         const oldH = oldMaxY - oldMinY;
 
-        if (oldW === 0 || oldH === 0) return;
+        // Масштабируем каждую мировую точку в новый AABB
+        // Если ширина/высота нулевая — просто смещаем без масштабирования по этой оси
+        const mapX = oldW > 0
+            ? (wx: number) => minX + (wx - oldMinX) / oldW * (maxX - minX)
+            : (_: number) => (minX + maxX) / 2;
+        const mapY = oldH > 0
+            ? (wy: number) => minY + (wy - oldMinY) / oldH * (maxY - minY)
+            : (_: number) => (minY + maxY) / 2;
 
-        const newW = maxX - minX;
-        const newH = maxY - minY;
-        const scaleX = newW / oldW;
-        const scaleY = newH / oldH;
+        const newP1dev = { x: mapX(p1dev.x), y: mapY(p1dev.y) };
+        const newP2dev = { x: mapX(p2dev.x), y: mapY(p2dev.y) };
 
-        const newP1dev = {
-            x: minX + (p1dev.x - oldMinX) * scaleX,
-            y: minY + (p1dev.y - oldMinY) * scaleY,
-        };
-        const newP2dev = {
-            x: minX + (p2dev.x - oldMinX) * scaleX,
-            y: minY + (p2dev.y - oldMinY) * scaleY,
-        };
-
+        // Новый центр линии
         const newCenterX = (newP1dev.x + newP2dev.x) / 2;
         const newCenterY = (newP1dev.y + newP2dev.y) / 2;
+
+        // Шаг 1: обновляем transform.x/y — матрица теперь актуальна
         this.transform.x = newCenterX;
         this.transform.y = newCenterY;
 
-        const v1 = { x: newP1dev.x - newCenterX, y: newP1dev.y - newCenterY };
-        const v2 = { x: newP2dev.x - newCenterX, y: newP2dev.y - newCenterY };
+        // Шаг 2: переводим мировые точки в локальные через новую инвертированную матрицу
+        const newLocal1 = this.transformPointToLocal(newP1dev.x, newP1dev.y);
+        const newLocal2 = this.transformPointToLocal(newP2dev.x, newP2dev.y);
+        if (!newLocal1 || !newLocal2) return;
 
-        const localToWorld = this.getLocalToDeviceMatrix(); // матрица лок. -> мир.
-        const invMatrix = mat3.invert(localToWorld);
-        if (!invMatrix) return;
-
-        const localV1 = mat3.transformPoint(invMatrix, v1.x, v1.y);
-        const localV2 = mat3.transformPoint(invMatrix, v2.x, v2.y);
-
-        this.x1 = localV1.x;
-        this.y1 = localV1.y;
-        this.x2 = localV2.x;
-        this.y2 = localV2.y;
+        this.x1 = newLocal1.x;
+        this.y1 = newLocal1.y;
+        this.x2 = newLocal2.x;
+        this.y2 = newLocal2.y;
     }
 
 }

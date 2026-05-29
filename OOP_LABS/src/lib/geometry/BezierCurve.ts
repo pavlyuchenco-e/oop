@@ -55,7 +55,7 @@ export abstract class BezierCurve extends Shape {
             const distSq = dx*dx + dy*dy;
             if (distSq < minDistSq) minDistSq = distSq;
         }
-        const threshold = this.strokeWidth / 2;
+        const threshold = Math.max(5, this.strokeWidth / 2);
         return Math.sqrt(minDistSq) <= threshold;
     }
 

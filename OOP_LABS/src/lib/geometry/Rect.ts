@@ -64,13 +64,13 @@ export class Rect extends Shape {
     }
 
     resizeFromDeviceAABB(minX: number, minY: number, maxX: number, maxY: number): void {
-        const newWidth = maxX - minX;
-        const newHeight = maxY - minY;
-        const newCenterX = (minX + maxX) / 2;
-        const newCenterY = (minY + maxY) / 2;
-
-        this.transform.x = newCenterX;
-        this.transform.y = newCenterY;
+        let newWidth = maxX - minX;
+        let newHeight = maxY - minY;
+        const minSize = 10;
+        newWidth = Math.max(newWidth, minSize);
+        newHeight = Math.max(newHeight, minSize);
+        this.transform.x = (minX + maxX) / 2;
+        this.transform.y = (minY + maxY) / 2;
         this.width = newWidth;
         this.height = newHeight;
     }
