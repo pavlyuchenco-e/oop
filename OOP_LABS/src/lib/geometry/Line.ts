@@ -141,7 +141,7 @@ export class Line extends Shape {
         const newCenterX = (newP1dev.x + newP2dev.x) / 2;
         const newCenterY = (newP1dev.y + newP2dev.y) / 2;
 
-        // Шаг 1: обновляем transform.x/y — матрица теперь актуальна
+        // Шаг 1: обновляем transform.x/y
         this.transform.x = newCenterX;
         this.transform.y = newCenterY;
 

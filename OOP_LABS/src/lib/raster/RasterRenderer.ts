@@ -245,7 +245,7 @@ export class RasterRenderer {
             const x1 = cx + dx;
             this.drawHSpan(y, x0, x1, color);
         }
-    }
+    } 
 
     strokeCircle(cx: number, cy: number, radius: number, color: RGBA, strokeWidth: number = 1): void {
         const r = Math.abs(radius);
