@@ -48,6 +48,8 @@ export default function Editor() {
   // Для интерактивного взаимодействия
   const [interaction, setInteraction] = useState<InteractionMode>('none');
   const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [selectedShapeJSON, setSelectedShapeJSON] = useState<string>('');
+
   const shapeStartRef = useRef<{
     transform: Transform;
     width?: number;
@@ -79,6 +81,24 @@ export default function Editor() {
     { id: 'cubic', icon: GitBranch, label: 'Куб. Безье' },
     { id: 'path', icon: GitBranch, label: 'Путь' },
   ];
+
+      useEffect(() => {
+    if (selectedShapeId) {
+      const shape = shapes.find(s => s.id === selectedShapeId);
+      if (shape && typeof shape.toJSON === 'function') {
+        try {
+          const json = shape.toJSON();
+          setSelectedShapeJSON(JSON.stringify(json, null, 2));
+        } catch (err) {
+          setSelectedShapeJSON('Ошибка сериализации');
+        }
+      } else {
+        setSelectedShapeJSON('Нет данных toJSON');
+      }
+    } else {
+      setSelectedShapeJSON('');
+    }
+  }, [selectedShapeId, shapes]);
 
   // Синхронизация рефов
   useEffect(() => {
@@ -704,6 +724,26 @@ export default function Editor() {
               </div>
             ))}
           </div>
+          <hr className="my-4 border-slate-700" />
+
+          <h3 className="font-semibold mb-2 flex items-center gap-2">📄 JSON выбранного объекта</h3>
+          <div className="bg-slate-950 rounded p-2 overflow-auto max-h-60">
+            {selectedShapeJSON ? (
+              <pre className="text-xs text-green-300 whitespace-pre-wrap break-words font-mono">
+                {selectedShapeJSON}
+              </pre>
+            ) : (
+              <p className="text-slate-400 text-sm">Ничего не выбрано</p>
+            )}
+          </div>
+          {selectedShapeJSON && (
+            <button
+              onClick={() => navigator.clipboard.writeText(selectedShapeJSON)}
+              className="mt-2 w-full bg-slate-700 hover:bg-slate-600 py-1 rounded text-xs transition-colors"
+            >
+              📋 Копировать JSON
+            </button>
+          )}
           {selectedShapeId && (
             <button onClick={() => { setShapes(shapes.filter(s => s.id !== selectedShapeId)); setSelectedShapeId(null); }} className="mt-4 w-full bg-red-600 hover:bg-red-700 py-2 rounded-lg flex items-center justify-center gap-2">
               <Trash2 className="w-4 h-4" /> Удалить выбранное
