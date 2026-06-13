@@ -12,6 +12,8 @@ import { QuadraticBezier } from '../lib/geometry/QuadraticBezier';
 import { CubicBezier } from '../lib/geometry/CubicBezier';
 import { PathBezier } from '../lib/geometry/PathBezier';
 import { Transform } from '../lib/geometry/Transform';
+import { saveProject, loadProject } from '../lib/Projectstorage';
+import { shapeFromJSON } from '../lib/geometry/ShapeFromJson';
 
 type InteractionMode = 'none' | 'move' | 'resize' | 'rotate' | 'editPoint';
 
@@ -35,6 +37,9 @@ export default function Editor() {
   const [lineAlg, setLineAlg] = useState<LineAlg>('bresenham');
   const [color, setColor] = useState('#3b82f6');
   const [lineThickness, setLineThickness] = useState(1);
+  const [projectName, setProjectName] = useState('Новый проект');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [shapes, setShapes] = useState<Shape[]>([]);
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
@@ -69,7 +74,44 @@ export default function Editor() {
 
   // Навигация
   const goBack = () => navigate(-1);
-  const saveAndGoHome = () => navigate('/', { replace: true });
+
+  /**
+   * Сохранение проекта.
+   * Собирает текущее состояние (название, алгоритм, массив фигур),
+   * вызывает saveProject() из projectStorage и навигирует обратно.
+   *
+   * id === 'new' означает первое сохранение — генерируем уникальный id.
+   * При последующих сохранениях используем тот же id из URL.
+   */
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const projectId = (id === 'new' || !id) ? `proj_${Date.now()}` : id;
+      const now = new Date().toISOString();
+
+      await saveProject({
+        meta: {
+          id: projectId,
+          name: projectName,
+          // При первом сохранении нового проекта createdAt = now.
+          // При обновлении существующего createdAt берём из уже загруженных данных
+          // (если они есть в projectNameRef). Для простоты всегда пишем now —
+          // index.json всё равно перезапишется актуальными данными.
+          createdAt: now,
+          updatedAt: now,
+        },
+        lineAlg,
+        shapes: shapesRef.current.map(s => s.toJSON()),
+      });
+
+      navigate('/', { replace: true });
+    } catch (err: any) {
+      setSaveError(err?.message ?? 'Ошибка сохранения');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const tools = [
     { id: 'select', icon: Move, label: 'Выбор' },
@@ -108,6 +150,36 @@ export default function Editor() {
       return prev;
     });
   }, [shapes]);
+
+  /**
+   * Загрузка проекта при открытии редактора.
+   *
+   * Срабатывает один раз при монтировании (зависимость — id из URL).
+   * Если id === 'new' — редактор открывается пустым.
+   * Если проект не найден — тоже открываем пустым (не крашим приложение).
+   *
+   * После загрузки восстанавливаем:
+   *   - название проекта
+   *   - алгоритм рисования линий
+   *   - массив фигур (через shapeFromJSON)
+   */
+  useEffect(() => {
+    if (!id || id === 'new') return;
+
+    loadProject(id).then(data => {
+      if (!data) return; // проект не найден — пустой холст
+
+      setProjectName(data.meta.name);
+      if (data.lineAlg) setLineAlg(data.lineAlg);
+
+      const restored = data.shapes
+        .map(shapeFromJSON)
+        .filter(Boolean) as Shape[];
+      setShapes(restored);
+    }).catch(err => {
+      console.error('Ошибка загрузки проекта:', err);
+    });
+  }, [id]);
 
   useEffect(() => {
     selectedShapeRef.current = selectedShapeId ? shapes.find(s => s.id === selectedShapeId) || null : null;
@@ -633,17 +705,34 @@ export default function Editor() {
   // Возвращаем JSX (панель инструментов + canvas + панель слоёв)
   return (
     <div className="h-screen flex flex-col">
-      {/* Header (без изменений) */}
+      {/* Header */}
       <motion.header className="h-14 border-b border-slate-800 bg-slate-900/50 backdrop-blur-sm flex items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <motion.button onClick={goBack} className="p-2 hover:bg-slate-800 rounded-lg">
             <ArrowLeft className="w-5 h-5" />
           </motion.button>
-          <h1 className="text-lg font-semibold">Редактирование проекта #{id === 'new' ? 'новый' : id}</h1>
+          {/* Редактируемое название проекта */}
+          <input
+            type="text"
+            value={projectName}
+            onChange={e => setProjectName(e.target.value)}
+            className="bg-transparent border-b border-slate-600 focus:border-blue-400 outline-none text-lg font-semibold px-1 py-0.5 w-48"
+            placeholder="Название проекта"
+          />
         </div>
-        <motion.button onClick={saveAndGoHome} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">
-          <Save className="w-4 h-4" /> Сохранить
-        </motion.button>
+        <div className="flex items-center gap-3">
+          {saveError && (
+            <span className="text-red-400 text-sm">{saveError}</span>
+          )}
+          <motion.button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-4 py-2 rounded-lg"
+          >
+            <Save className="w-4 h-4" />
+            {isSaving ? 'Сохранение...' : 'Сохранить'}
+          </motion.button>
+        </div>
       </motion.header>
 
       <div className="flex flex-1 overflow-hidden">

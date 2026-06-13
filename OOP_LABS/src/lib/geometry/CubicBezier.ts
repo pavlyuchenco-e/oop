@@ -57,41 +57,27 @@ export class CubicBezier extends BezierCurve {
             p2: this.p2,
             p3: this.p3,
             transform: this.transform.toJSON(),
-            style: { /* ... */ }
+            style: this.serializeStyle(),
         };
     }
 
     resizeFromDeviceAABB(minX: number, minY: number, maxX: number, maxY: number): void {
+        //масштабируем контрольные точки относительно центра AABB
         const oldBounds = this.getBounds();
-        const oldW = oldBounds.maxX - oldBounds.minX;
-        const oldH = oldBounds.maxY - oldBounds.minY;
-        if (oldW === 0 || oldH === 0) return;
-        const scaleX = (maxX - minX) / oldW;
-        const scaleY = (maxY - minY) / oldH;
-        const newCenterX = (minX + maxX) / 2;
-        const newCenterY = (minY + maxY) / 2;
-        const oldCenterX = (oldBounds.minX + oldBounds.maxX) / 2;
-        const oldCenterY = (oldBounds.minY + oldBounds.maxY) / 2;
-
-        // Шаг 1: вычисляем новые мировые позиции контрольных точек ДО изменения transform
-        const pts = [this.p0, this.p1, this.p2, this.p3];
-        const newWorldPositions = pts.map(pt => {
+        const scaleX = (maxX - minX) / (oldBounds.maxX - oldBounds.minX);
+        const scaleY = (maxY - minY) / (oldBounds.maxY - oldBounds.minY);
+        const center = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+        for (let pt of [this.p0, this.p1, this.p2, this.p3]) {
             const world = this.transformPointToDevice(pt.x, pt.y);
-            return {
-                x: newCenterX + (world.x - oldCenterX) * scaleX,
-                y: newCenterY + (world.y - oldCenterY) * scaleY,
-            };
-        });
-
-        // Шаг 2: обновляем позицию трансформа — теперь матрица актуальна
-        this.transform.x = newCenterX;
-        this.transform.y = newCenterY;
-
-        // Шаг 3: переводим мировые точки в локальные через НОВУЮ инвертированную матрицу
-        const newLocals = newWorldPositions.map(w => this.transformPointToLocal(w.x, w.y));
-        if (newLocals[0]) { this.p0.x = newLocals[0].x; this.p0.y = newLocals[0].y; }
-        if (newLocals[1]) { this.p1.x = newLocals[1].x; this.p1.y = newLocals[1].y; }
-        if (newLocals[2]) { this.p2.x = newLocals[2].x; this.p2.y = newLocals[2].y; }
-        if (newLocals[3]) { this.p3.x = newLocals[3].x; this.p3.y = newLocals[3].y; }
+            const newWorldX = center.x + (world.x - center.x) * scaleX;
+            const newWorldY = center.y + (world.y - center.y) * scaleY;
+            const newLocal = this.transformPointToLocal(newWorldX, newWorldY);
+            if (newLocal) {
+                pt.x = newLocal.x;
+                pt.y = newLocal.y;
+            }
+        }
+        this.transform.x = center.x;
+        this.transform.y = center.y;
     }
 }

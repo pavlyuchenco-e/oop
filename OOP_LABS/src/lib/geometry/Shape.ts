@@ -87,4 +87,14 @@ export abstract class Shape {
         const a = Math.round(c.a * this.strokeOpacity);
         return { r: c.r, g: c.g, b: c.b, a };
     }
+
+    protected serializeStyle(): object {
+        return {
+            fillStyle: this.fillStyle,
+            fillOpacity: this.fillOpacity,
+            strokeStyle: this.strokeStyle,
+            strokeWidth: this.strokeWidth,
+            strokeOpacity: this.strokeOpacity,
+        };
+    }
 }
